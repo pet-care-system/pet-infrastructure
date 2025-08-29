@@ -24,9 +24,8 @@ pet-infrastructure/
 # Start all services locally
 ./scripts/local/start-all.sh
 
-# Start individual services
-./scripts/local/start-backend.sh
-./scripts/local/start-frontend.sh
+# Stop all services
+./scripts/local/stop-all.sh
 ```
 
 ### Docker Deployment
@@ -36,12 +35,28 @@ pet-infrastructure/
 
 # Production environment
 ./scripts/docker/prod-deploy.sh
+
+# Stop services
+./scripts/docker/stop.sh
+```
+
+### Remote Server Deployment
+```bash
+# Setup server environment (run once)
+./scripts/remote/setup-server.sh
+
+# Deploy to remote server
+./scripts/remote/deploy-to-server.sh
+
+# Update remote deployment
+./scripts/remote/update-server.sh
 ```
 
 ## 📚 Documentation
 
 - [Deployment Guide](docs/deployment/README.md) - Complete deployment instructions
-- [Architecture Overview](docs/architecture/SYSTEM_ARCHITECTURE.md) - System architecture documentation
+- [Remote Deployment](docs/deployment/REMOTE_DEPLOYMENT.md) - Remote server deployment guide
+- [Architecture Overview](docs/architecture/DEPLOYMENT_ARCHITECTURE.md) - System architecture documentation
 - [Docker Guide](docs/deployment/DOCKER_GUIDE.md) - Docker deployment guide
 
 ## 🔗 Related Repositories
