@@ -1,0 +1,212 @@
+version: '3.8'
+
+services:
+  # PostgreSQL数据库服务
+  postgres:
+    image: postgres:15-alpine
+    container_name: pet-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: pet_management
+      POSTGRES_USER: pet_admin
+      POSTGRES_PASSWORD: pet_secure_password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./pet-backend/database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - pet-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pet_admin -d pet_management"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis缓存服务
+  redis:
+    image: redis:7-alpine
+    container_name: pet-redis
+    restart: unless-stopped
+    command: redis-server --requirepass redis_password
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - pet-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 完整版后端服务
+  backend:
+    build:
+      context: ./pet-backend
+      dockerfile: Dockerfile
+    container_name: pet-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      
+      # 数据库配置
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: pet_management
+      DB_USER: pet_admin
+      DB_PASSWORD: pet_secure_password
+      
+      # Redis配置
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis_password
+      
+      # JWT配置
+      JWT_SECRET: pet_jwt_super_secret_key_2025
+      JWT_EXPIRES_IN: 7d
+      
+      # API配置
+      API_BASE_URL: http://backend:3000
+      CORS_ORIGIN: http://localhost:3001
+      
+      # 功能开关
+      ENABLE_INTELLIGENT_INVENTORY: true
+      ENABLE_IOT_INTEGRATION: true
+      ENABLE_REPORTS: true
+    volumes:
+      - ./pet-backend/logs:/app/logs
+      - ./pet-backend/uploads:/app/uploads
+    ports:
+      - "3000:3000"
+    networks:
+      - pet-network
+    healthcheck:
+      test: ["CMD", "node", "healthcheck.js"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 简化版后端服务（备选）
+  simple-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.simple-backend
+    container_name: pet-simple-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 8000
+    ports:
+      - "8000:8000"
+    networks:
+      - pet-network
+    profiles:
+      - simple
+    healthcheck:
+      test: ["CMD", "node", "-e", "const http=require('http');const req=http.request({hostname:'localhost',port:8000,path:'/health',timeout:3000},res=>process.exit(res.statusCode===200?0:1));req.on('error',()=>process.exit(1));req.end();"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # 前端服务
+  frontend:
+    build:
+      context: ./pet-frontend
+      dockerfile: Dockerfile
+      args:
+        BUILD_MODE: production
+        VITE_API_BASE_URL: http://localhost:3000/api
+        VITE_AUTH_BASE_URL: http://localhost:3000
+        VITE_OAUTH_CLIENT_ID: web_client_001
+        VITE_APP_URL: http://localhost:3001
+    container_name: pet-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      VITE_API_BASE_URL: http://localhost:3000/api
+      VITE_AUTH_BASE_URL: http://localhost:3000
+      VITE_OAUTH_CLIENT_ID: web_client_001
+      VITE_APP_URL: http://localhost:3001
+      NGINX_HOST: localhost
+      NGINX_PORT: 80
+    ports:
+      - "3001:80"
+    networks:
+      - pet-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # 客户门户服务
+  customer-portal:
+    build:
+      context: ./pet-customer-portal
+      dockerfile: Dockerfile
+    container_name: pet-customer-portal
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NODE_ENV: production
+      PORT: 3002
+      NEXT_PUBLIC_API_URL: http://localhost:3000/api
+      NEXT_PUBLIC_AUTH_URL: http://localhost:3000
+      API_URL: http://backend:3000/api
+    ports:
+      - "3002:3002"
+    networks:
+      - pet-network
+    profiles:
+      - full
+
+  # Nginx反向代理（可选）
+  nginx:
+    image: nginx:alpine
+    container_name: pet-nginx
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - backend
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    networks:
+      - pet-network
+    profiles:
+      - proxy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# 数据卷
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# 网络配置
+networks:
+  pet-network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16

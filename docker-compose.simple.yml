@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  # 简化版后端API服务
+  simple-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.simple-backend
+    container_name: pet-simple-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 8000
+    ports:
+      - "8000:8000"
+    networks:
+      - pet-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "const http=require('http');const req=http.request({hostname:'localhost',port:8000,path:'/health',timeout:3000},res=>process.exit(res.statusCode===200?0:1));req.on('error',()=>process.exit(1));req.end();"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # 前端服务（使用构建好的dist）
+  frontend:
+    build:
+      context: ./pet-frontend
+      dockerfile: Dockerfile
+      args:
+        BUILD_MODE: production
+        VITE_API_BASE_URL: http://localhost:8000/api
+        VITE_AUTH_BASE_URL: http://localhost:8000
+        VITE_OAUTH_CLIENT_ID: web_client_001
+        VITE_APP_URL: http://localhost:3001
+    container_name: pet-frontend
+    restart: unless-stopped
+    depends_on:
+      - simple-backend
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000/api
+      VITE_AUTH_BASE_URL: http://localhost:8000
+      VITE_OAUTH_CLIENT_ID: web_client_001
+      VITE_APP_URL: http://localhost:3001
+      NGINX_HOST: localhost
+      NGINX_PORT: 80
+    ports:
+      - "3001:80"
+    networks:
+      - pet-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# 网络配置
+networks:
+  pet-network:
+    driver: bridge

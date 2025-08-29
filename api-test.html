@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API测试页面</title>
+</head>
+<body>
+    <h1>宠物管理系统API测试</h1>
+    
+    <div>
+        <h2>登录测试</h2>
+        <button onclick="testLogin()">测试登录</button>
+        <div id="loginResult"></div>
+    </div>
+
+    <div>
+        <h2>获取宠物列表</h2>
+        <button onclick="testPets()">测试宠物API</button>
+        <div id="petsResult"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        
+        async function testLogin() {
+            try {
+                const response = await fetch(`${API_BASE}/api/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: 'admin',
+                        password: 'password'
+                    })
+                });
+                
+                const result = await response.json();
+                document.getElementById('loginResult').innerHTML = 
+                    `<pre>${JSON.stringify(result, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('loginResult').innerHTML = 
+                    `<p style="color: red">错误: ${error.message}</p>`;
+            }
+        }
+        
+        async function testPets() {
+            try {
+                const response = await fetch(`${API_BASE}/api/pets`);
+                const result = await response.json();
+                document.getElementById('petsResult').innerHTML = 
+                    `<pre>${JSON.stringify(result, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('petsResult').innerHTML = 
+                    `<p style="color: red">错误: ${error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>
